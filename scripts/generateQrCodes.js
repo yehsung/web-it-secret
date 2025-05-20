@@ -146,6 +146,147 @@ async function addQrCodesToFirebase(qrCodes) {
     }
 }
 
+// === QR 코드 검증 및 카테고리 관련 함수 ===
+// QR ID에서 카테고리 추출 함수
+function getCategoryFromQrId(qrId) {
+  if (!qrId || typeof qrId !== 'string') return null;
+  if (qrId.startsWith('pre')) return '프리미엄';
+  if (qrId.startsWith('nor')) return '일반';
+  return null;
+}
+
+// 사용자의 카테고리별 수령 이력 확인 함수
+function checkUserCategoryHistory(studentId, category) {
+  console.log(`사용자 ${studentId}의 ${category} 카테고리 수령 이력 확인 시작`);
+  try {
+    const submissions = firebaseGetData('form_submissions');
+    if (!submissions) return false;
+
+    // form_submissions의 모든 항목을 순회하며 확인
+    for (const submissionId in submissions) {
+      const submission = submissions[submissionId];
+      if (submission.studentId === studentId) {
+        // 해당 제출의 QR 코드 정보 가져오기
+        const qrCode = firebaseGetData(`qrCodes/${submission.qrId}`);
+        if (qrCode) {
+          const submissionCategory = getCategoryFromQrId(submission.qrId);
+          if (submissionCategory === category) {
+            console.log(`사용자 ${studentId}가 이미 ${category} 카테고리 상품을 수령했습니다.`);
+            return true;
+          }
+        }
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('사용자 카테고리 이력 확인 중 오류:', error);
+    return false;
+  }
+}
+
+// === 폼 제출 이벤트 핸들러 ===
+function onFormSubmit(e) {
+  console.log('============= 폼 제출 이벤트 처리 시작 =============');
+  const startTime = new Date();
+  console.log('이벤트 발생 시각:', startTime.toISOString());
+
+  // ... existing code ...
+
+  try {
+    // 1. 제출된 폼 응답에서 'ID' 필드 값 가져오기
+    if (!submittedQrId) {
+      console.error('오류: 추출된 QR 코드 ID가 누락되었거나 비어있습니다.');
+      return;
+    }
+
+    // QR ID 형식 검증 (pre/nor + 30~50자 랜덤 문자열)
+    if (!/^(pre|nor)[a-zA-Z0-9]{30,50}$/.test(submittedQrId)) {
+      console.error(`오류: QR 코드 ID 형식이 올바르지 않습니다: "${submittedQrId}"`);
+      return;
+    }
+
+    // QR ID에서 카테고리 추출
+    const category = getCategoryFromQrId(submittedQrId);
+    if (!category) {
+      console.error(`오류: QR 코드 ID에서 카테고리를 추출할 수 없습니다: "${submittedQrId}"`);
+      return;
+    }
+
+    // 2. Firebase에서 QR 코드 정보 확인
+    const qrCode = firebaseGetData(`qrCodes/${submittedQrId}`);
+    if (!qrCode) {
+      console.error(`오류: QR 코드를 찾을 수 없습니다: "${submittedQrId}"`);
+      return;
+    }
+
+    // 2-1. QR 코드가 이미 사용되었는지 확인
+    if (qrCode.isUsed === true) {
+      console.warn(`경고: QR 코드가 이미 사용되었습니다: "${submittedQrId}"`);
+      return;
+    }
+
+    // 2-2. 사용자 정보 검증
+    if (!name || !studentId || !privacyConsent) {
+      console.error('오류: 필수 정보가 누락되었습니다.');
+      return;
+    }
+
+    // 2-3. 재학생 확인
+    const studentList = getStudentList();
+    const isStudent = checkStudentExists(studentList, name, studentId);
+    if (!isStudent) {
+      console.error('오류: 재학생이 아닙니다.');
+      return;
+    }
+
+    // 2-4. 카테고리별 수령 이력 확인
+    if (checkUserCategoryHistory(studentId, category)) {
+      console.error(`오류: 이미 ${category} 카테고리 상품을 수령했습니다.`);
+      return;
+    }
+
+    // 3. 모든 검증 통과 시 Firebase 업데이트
+    const submissionTimestamp = new Date().toISOString();
+    const submissionData = {
+      qrId: submittedQrId,
+      productId: qrCode.productId,
+      name: name,
+      studentId: studentId,
+      phone: phone,
+      privacyConsent: privacyConsent,
+      category: category,
+      timestamp: submissionTimestamp
+    };
+
+    // form_submissions에 데이터 추가
+    if (!firebasePushData('form_submissions', submissionData)) {
+      console.error('오류: 폼 제출 데이터 저장 실패');
+      return;
+    }
+
+    // QR 코드 상태 업데이트
+    const userInfoForUpdate = {
+      name: name,
+      studentId: studentId,
+      phone: phone
+    };
+    
+    if (!updateQrCodeStatus(submittedQrId, true, userInfoForUpdate)) {
+      console.error('오류: QR 코드 상태 업데이트 실패');
+      return;
+    }
+
+    console.log('============= 폼 제출 이벤트 처리 완료 (성공) =============');
+
+  } catch (error) {
+    console.error('처리 중 오류 발생:', error);
+  }
+
+  const endTime = new Date();
+  console.log('이벤트 처리 종료 시각:', endTime.toISOString());
+  console.log('총 처리 시간 (밀리초):', endTime.getTime() - startTime.getTime());
+}
+
 // 스크립트 실행 메인 함수
 async function main() {
     try {
