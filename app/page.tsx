@@ -1,6 +1,12 @@
+"use client"; // 클라이언트 컴포넌트 명시
+
 import Image from "next/image"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
+
+import React, { useState, useEffect } from "react"; // useState, useEffect import
+import { database } from "@/lib/firebase"; // Firebase 설정 파일 경로 확인 및 수정
+import { ref, onValue, DataSnapshot } from "firebase/database"; // Firebase Realtime Database 함수 import
 
 // 상품 데이터 (실제로는 API나 데이터베이스에서 가져올 것입니다)
 const productsData = [
@@ -42,78 +48,59 @@ const productsData = [
   },
 ]
 
-// 실제 구현에서는 데이터베이스에서 가져올 것입니다
-const qrCodesData = [
-  // 에어팟 QR코드
-  { id: "qr001", productId: 1, isUsed: false },
-
-  // 키보드 QR코드
-  { id: "qr002", productId: 2, isUsed: false },
-  { id: "qr003", productId: 2, isUsed: true }, // 이미 사용됨
-  { id: "qr004", productId: 2, isUsed: false },
-
-  // 보조배터리 QR코드
-  { id: "qr005", productId: 3, isUsed: false },
-  { id: "qr006", productId: 3, isUsed: false },
-  { id: "qr007", productId: 3, isUsed: false },
-
-  // 카드지갑 QR코드
-  { id: "qr008", productId: 4, isUsed: false },
-  { id: "qr009", productId: 4, isUsed: false },
-  { id: "qr010", productId: 4, isUsed: false },
-
-  // 숭실대 후디베어 키링 QR코드 (15개)
-  { id: "qr011", productId: 5, isUsed: false },
-  { id: "qr012", productId: 5, isUsed: false },
-  { id: "qr013", productId: 5, isUsed: true }, // 이미 사용됨
-  { id: "qr014", productId: 5, isUsed: false },
-  { id: "qr015", productId: 5, isUsed: false },
-  { id: "qr016", productId: 5, isUsed: false },
-  { id: "qr017", productId: 5, isUsed: false },
-  { id: "qr018", productId: 5, isUsed: true }, // 이미 사용됨
-  { id: "qr019", productId: 5, isUsed: false },
-  { id: "qr020", productId: 5, isUsed: false },
-  { id: "qr021", productId: 5, isUsed: false },
-  { id: "qr022", productId: 5, isUsed: false },
-  { id: "qr023", productId: 5, isUsed: false },
-  { id: "qr024", productId: 5, isUsed: false },
-  { id: "qr025", productId: 5, isUsed: false },
-
-  // 3단 자동우산 QR코드 (15개)
-  { id: "qr026", productId: 6, isUsed: false },
-  { id: "qr027", productId: 6, isUsed: false },
-  { id: "qr028", productId: 6, isUsed: true }, // 이미 사용됨
-  { id: "qr029", productId: 6, isUsed: false },
-  { id: "qr030", productId: 6, isUsed: false },
-  { id: "qr031", productId: 6, isUsed: false },
-  { id: "qr032", productId: 6, isUsed: false },
-  { id: "qr033", productId: 6, isUsed: true }, // 이미 사용됨
-  { id: "qr034", productId: 6, isUsed: false },
-  { id: "qr035", productId: 6, isUsed: false },
-  { id: "qr036", productId: 6, isUsed: false },
-  { id: "qr037", productId: 6, isUsed: false },
-  { id: "qr038", productId: 6, isUsed: false },
-  { id: "qr039", productId: 6, isUsed: false },
-  { id: "qr040", productId: 6, isUsed: false },
-]
-
-// 각 상품별 총 QR코드 수와 사용되지 않은 QR코드 수 계산
-function getProductStats() {
-  return productsData.map((product) => {
-    const qrCodes = qrCodesData.filter((qr) => qr.productId === product.id)
-    const total = qrCodes.length
-    const remaining = qrCodes.filter((qr) => !qr.isUsed).length
-
-    return {
-      ...product,
-      total,
-      remaining,
-    }
-  })
+// Firebase에서 QR 코드 데이터를 가져와 상태로 관리
+interface QrCodeData {
+  id: string; // 새로운 형식: pre/nor + 랜덤 문자열 (30~50자)
+  productId: number;
+  isUsed: boolean;
+  usedBy: {
+    name: string | null;
+    studentId: string | null;
+    phone: string | null;
+  };
+  usedAt: string | null;
 }
 
 export default function Home() {
-  const products = getProductStats()
+  const [qrCodes, setQrCodes] = useState<QrCodeData[]>([]); // Firebase에서 가져온 QR 코드 데이터 상태
+  const [productStats, setProductStats] = useState<any[]>([]); // 상품별 통계 상태
+
+  useEffect(() => {
+    // Firebase Realtime Database의 '/qrCodes' 경로 구독
+    const qrCodesRef = ref(database, 'qrCodes');
+    const unsubscribe = onValue(qrCodesRef, (snapshot: DataSnapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        // 객체 형태의 데이터를 배열로 변환
+        const qrCodesArray: QrCodeData[] = Object.values(data);
+        setQrCodes(qrCodesArray);
+        // 데이터가 업데이트될 때마다 상품 통계 다시 계산
+        setProductStats(calculateProductStats(qrCodesArray, productsData));
+      } else {
+        setQrCodes([]);
+        setProductStats(calculateProductStats([], productsData));
+      }
+    });
+
+    // 컴포넌트 언마운트 시 구독 해제
+    return () => unsubscribe();
+  }, []); // 최초 마운트 시에만 실행
+
+  // QR 코드 데이터를 기반으로 상품별 총수량 및 남은 수량 계산 함수
+  const calculateProductStats = (qrCodes: QrCodeData[], productsData: any[]) => {
+    return productsData.map(product => {
+      // 해당 상품 ID를 가진 QR 코드들 필터링
+      const productQrCodes = qrCodes.filter(qr => qr.productId === product.id);
+      const total = productQrCodes.length; // 총 수량
+      const remaining = productQrCodes.filter(qr => !qr.isUsed).length; // 사용되지 않은 수량
+
+      return {
+        ...product,
+        total,
+        remaining,
+      };
+    });
+  };
 
   return (
     <main className="min-h-screen bg-[#0d1117] text-white">
@@ -142,7 +129,7 @@ export default function Home() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h2 className="text-2xl font-bold mb-8 text-center">상품 목록</h2>
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
-          {products.map((product) => (
+          {productStats.map((product) => (
             <div
               key={product.id}
               className="bg-[#161b22] rounded-lg overflow-hidden shadow-lg border border-gray-800 hover:border-purple-500 transition-all duration-300 hover:shadow-purple-900/30 hover:shadow-xl"

@@ -11,15 +11,43 @@ admin.initializeApp({
 
 const database = admin.database();
 
-// QR 코드 생성을 위한 유틸리티 함수
-function generateRandomId(length = 16) {
-    const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-    let result = '';
-    const charactersLength = characters.length;
-    for (let i = 0; i < length; i++) {
-        result += characters.charAt(Math.floor(Math.random() * charactersLength));
-    }
-    return result;
+/**
+ * 새로운 형식의 QR ID를 생성합니다.
+ * ID 형식: [pre|nor] + 랜덤 영숫자 (총 길이 30 ~ 50자)
+ * @param {string} category - 상품 카테고리 ('프리미엄' 또는 '일반')
+ * @returns {string} 생성된 새로운 QR ID
+ * @throws {Error} 유효하지 않은 카테고리인 경우 오류 발생
+ */
+function generateNewQrId(category) {
+  // 카테고리에 따른 접두사 설정
+  let prefix = '';
+  if (category === '프리미엄') {
+    prefix = 'pre';
+  } else if (category === '일반') {
+    prefix = 'nor';
+  } else {
+    throw new Error(`Error: Invalid product category provided for ID generation: "${category}". Category must be '프리미엄' or '일반'.`);
+  }
+
+  // 랜덤 길이 결정 (30 이상 50 이하의 정수)
+  const minTotalLength = 30;
+  const maxTotalLength = 50;
+  // 접두사 길이를 뺀 나머지 랜덤 문자열의 길이 범위
+  const minRandomLength = minTotalLength - prefix.length;
+  const maxRandomLength = maxTotalLength - prefix.length;
+
+  // 계산된 랜덤 문자열 길이 (minRandomLength 이상 maxRandomLength 이하)
+  const randomPartLength = Math.floor(Math.random() * (maxRandomLength - minRandomLength + 1)) + minRandomLength;
+
+  // 랜덤 영숫자 문자열 생성
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+  let randomString = '';
+  const charactersLength = characters.length;
+  for (let i = 0; i < randomPartLength; i++) {
+    randomString += characters.charAt(Math.floor(Math.random() * charactersLength));
+  }
+
+  return prefix + randomString;
 }
 
 // 상품 데이터 (productsData와 동일한 구조)
@@ -34,13 +62,15 @@ const productsData = [
 
 // 각 상품별로 QR 코드 생성
 function generateQrCodesForProducts() {
+    console.log('Generating QR codes with new format...');
     const qrCodes = {};
     let totalQrCodes = 0;
-    
+
     productsData.forEach(product => {
+        console.log(`\nGenerating QR codes for ${product.name}...`);
         // 각 상품별로 지정된 수량만큼 QR 코드 생성
         for (let i = 0; i < product.quantity; i++) {
-            const qrId = generateRandomId(16);
+            const qrId = generateNewQrId(product.category);
             qrCodes[qrId] = {
                 id: qrId,
                 productId: product.id,
@@ -53,66 +83,81 @@ function generateQrCodesForProducts() {
                 usedAt: null
             };
             totalQrCodes++;
+            console.log(`Generated QR Code ${i + 1}/${product.quantity}: ${qrId}`);
         }
-        
-        console.log(`생성된 QR 코드 (${product.name}):`);
-        console.log(`- 수량: ${product.quantity}개`);
-        console.log(`- 카테고리: ${product.category}`);
-        console.log('-------------------');
     });
-    
-    console.log(`총 생성된 QR 코드 수: ${totalQrCodes}개`);
+
+    console.log(`\nTotal generated QR codes: ${totalQrCodes}개`);
     return qrCodes;
 }
 
 // Firebase에 QR 코드 데이터를 추가하는 함수
+// 이 함수는 기존 데이터를 삭제하고 새로운 데이터를 씁니다. (마이그레이션 스크립트와 유사)
+// !! 주의: 이 스크립트 실행 시 Firebase의 기존 /qrCodes 데이터는 삭제됩니다.
 async function addQrCodesToFirebase(qrCodes) {
+    console.log('Adding generated QR codes to Firebase...');
     try {
-        // 기존 데이터 삭제 (선택사항)
+        // 기존 데이터 삭제 (선택사항이나, 새로운 ID로 덮어쓰려면 삭제하는 것이 일반적)
+        // 주의: 기존 데이터가 필요한 경우 이 라인을 제거하거나 마이그레이션 스크립트를 별도로 사용하세요。
         await database.ref('qrCodes').remove();
-        console.log('기존 QR 코드 데이터가 삭제되었습니다.');
+        console.log('Existing QR code data deleted from Firebase.');
 
         // 새로운 QR 코드 데이터 추가
         await database.ref('qrCodes').set(qrCodes);
-        console.log('새로운 QR 코드 데이터가 Firebase에 추가되었습니다.');
-        
+        console.log('New QR code data successfully added to Firebase.');
+
         // 생성된 QR 코드 통계 출력
-        console.log('\n생성된 QR 코드 통계:');
+        console.log('\nGenerated QR Code Statistics:');
         productsData.forEach(product => {
+            // 생성된 qrCodes 객체에서 해당 productId를 가진 QR 코드를 찾습니다.
             const productQrCodes = Object.values(qrCodes).filter(qr => qr.productId === product.id);
             console.log(`${product.name}:`);
-            console.log(`- 생성된 QR 코드 수: ${productQrCodes.length}개`);
+            console.log(`- Generated Count: ${productQrCodes.length}개`);
             console.log(`- 카테고리: ${product.category}`);
             console.log('-------------------');
         });
 
         // 샘플 QR 코드 URL 출력 (각 상품별 1개씩)
-        console.log('\n샘플 QR 코드 URL:');
+        console.log('\nSample QR Code URLs:');
         productsData.forEach(product => {
-            const sampleQrCode = Object.entries(qrCodes).find(([_, data]) => data.productId === product.id);
-            if (sampleQrCode) {
-                const [qrId, _] = sampleQrCode;
+            const sampleQrCodeEntry = Object.entries(qrCodes).find(([qrId, data]) => data.productId === product.id);
+            if (sampleQrCodeEntry) {
+                const [qrId, _] = sampleQrCodeEntry;
+                // !! 중요: 아래 YOUR_SITE_URL_HERE 부분을 실제 웹사이트 주소로 변경하세요!
                 console.log(`${product.name}:`);
-                console.log(`URL: https://여러분의사이트주소/reward/${qrId}`);
+                console.log(`URL: https://YOUR_SITE_URL_HERE/reward/${qrId}`);
                 console.log('-------------------');
             }
         });
 
     } catch (error) {
-        console.error('Firebase 데이터 추가 중 오류 발생:', error);
+        console.error('Error adding QR code data to Firebase:', error);
     } finally {
-        // Firebase 앱 종료
-        admin.app().delete();
+        // Firebase 앱 종료 (스크립트 실행 완료 후)
+        // process.exit(0); // Node.js 스크립트 종료
+        if (admin.apps.length > 0) {
+           try {
+              admin.app().delete();
+              console.log("Firebase app deleted.");
+           } catch (error) {
+              console.error("Error deleting Firebase app:", error);
+           }
+        }
     }
 }
 
-// 스크립트 실행
+// 스크립트 실행 메인 함수
 async function main() {
     try {
         const generatedQrCodes = generateQrCodesForProducts();
-        await addQrCodesToFirebase(generatedQrCodes);
+        // 생성된 QR 코드가 0개 이상인지 확인 후 Firebase에 추가
+        if (Object.keys(generatedQrCodes).length > 0) {
+             await addQrCodesToFirebase(generatedQrCodes);
+        } else {
+             console.log("No QR codes generated. Skipping Firebase add.");
+        }
     } catch (error) {
-        console.error('스크립트 실행 중 오류 발생:', error);
+        console.error('Error during script execution:', error);
     }
 }
 

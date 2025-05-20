@@ -67,10 +67,14 @@ const QR_ID_ENTRY_ID = "200310164";
 // const PRODUCT_ID_ENTRY_ID = "여기에_상품_ID_필드의_Entry_ID_입력";
 
 interface QrCodeData {
-  id: string;
-  productId: number; // Firebase에서 숫자로 저장되므로 number로 변경
+  id: string; // 새로운 형식: pre/nor + 랜덤 문자열 (30~50자)
+  productId: number;
   isUsed: boolean;
-  usedBy: string | null;
+  usedBy: {
+    name: string | null;
+    studentId: string | null;
+    phone: string | null;
+  };
   usedAt: string | null;
 }
 

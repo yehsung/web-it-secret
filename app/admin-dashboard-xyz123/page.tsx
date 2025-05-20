@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react"
 import { database } from "@/lib/firebase"
-import { ref, onValue, update, DataSnapshot } from "firebase/database"
+import { ref, onValue, update, DataSnapshot, set } from "firebase/database"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -27,7 +27,11 @@ interface QrCode {
   id: string;
   productId: number;
   isUsed: boolean;
-  usedBy: string | null;
+  usedBy: {
+    name: string | null;
+    studentId: string | null;
+    phone: string | null;
+  } | null;
   usedAt: string | null;
 }
 
@@ -83,6 +87,7 @@ export default function AdminDashboard() {
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedProduct, setSelectedProduct] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
+  const [isResetting, setIsResetting] = useState(false)
 
   useEffect(() => {
     // QR 코드 데이터 구독
@@ -124,6 +129,40 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleResetAllSubmissions = async () => {
+    if (!window.confirm('정말로 모든 수령 내역을 초기화하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return;
+    }
+
+    setIsResetting(true);
+    try {
+      // 1. form_submissions 초기화
+      await set(ref(database, 'form_submissions'), {});
+      console.log('모든 수령 내역이 초기화되었습니다.');
+
+      // 2. 모든 QR 코드 초기화
+      const updates: { [key: string]: any } = {};
+      qrCodes.forEach(qrCode => {
+        updates[`qrCodes/${qrCode.id}`] = {
+          ...qrCode,
+          isUsed: false,
+          usedBy: null,
+          usedAt: null
+        };
+      });
+
+      await update(ref(database), updates);
+      console.log('모든 QR 코드가 초기화되었습니다.');
+
+      alert('모든 수령 내역과 QR 코드가 성공적으로 초기화되었습니다.');
+    } catch (error) {
+      console.error('초기화 중 오류 발생:', error);
+      alert('초기화 중 오류가 발생했습니다.');
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const filteredQrCodes = qrCodes.filter((qrCode) => {
     const matchesSearch = qrCode.id.toLowerCase().includes(searchTerm.toLowerCase())
     const matchesProduct = selectedProduct === "all" || qrCode.productId.toString() === selectedProduct
@@ -158,7 +197,16 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* 대시보드 헤더 */}
         <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">QR코드 별 상품 관리</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-2xl font-bold text-gray-900">QR코드 별 상품 관리</h2>
+            <Button
+              variant="destructive"
+              onClick={handleResetAllSubmissions}
+              disabled={isResetting}
+            >
+              {isResetting ? '초기화 중...' : '모든 수령 내역 초기화'}
+            </Button>
+          </div>
           <div className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <Card>
@@ -328,7 +376,17 @@ export default function AdminDashboard() {
                         </Badge>
                       )}
                     </TableCell>
-                    <TableCell>{qrCode.usedBy || "-"}</TableCell>
+                    <TableCell>
+                      {qrCode.isUsed ? (
+                        <div className="space-y-1">
+                          <div>이름: {qrCode.usedBy?.name || 'N/A'}</div>
+                          <div>학번: {qrCode.usedBy?.studentId || 'N/A'}</div>
+                          <div>전화번호: {qrCode.usedBy?.phone || 'N/A'}</div>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">-</span>
+                      )}
+                    </TableCell>
                     <TableCell>{qrCode.usedAt ? new Date(qrCode.usedAt).toLocaleString() : "-"}</TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end">
