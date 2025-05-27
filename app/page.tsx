@@ -8,7 +8,7 @@ import React, { useState, useEffect } from "react"; // useState, useEffect impor
 import { database } from "@/lib/firebase"; // Firebase 설정 파일 경로 확인 및 수정
 import { ref, onValue, DataSnapshot } from "firebase/database"; // Firebase Realtime Database 함수 import
 
-// 상품 데이터 (실제로는 API나 데이터베이스에서 가져올 것입니다)
+// 상품 데이터 
 const productsData = [
   {
     id: 1,

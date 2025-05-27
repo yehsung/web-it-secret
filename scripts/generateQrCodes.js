@@ -199,8 +199,8 @@ function onFormSubmit(e) {
       return;
     }
 
-    // QR ID 형식 검증 (pre/nor + 30~50자 랜덤 문자열)
-    if (!/^(pre|nor)[a-zA-Z0-9]{30,50}$/.test(submittedQrId)) {
+    // QR ID 형식 검증 (pre/nor + 랜덤 영숫자, 전체 길이 30~50자)
+    if (!/^(pre|nor)[a-zA-Z0-9]{27,47}$/.test(submittedQrId)) {
       console.error(`오류: QR 코드 ID 형식이 올바르지 않습니다: "${submittedQrId}"`);
       return;
     }
