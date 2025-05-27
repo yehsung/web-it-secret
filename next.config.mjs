@@ -4,9 +4,6 @@ const nextConfig = {
     domains: ['placeholder.com'],
     unoptimized: true,
   },
-  experimental: {
-    serverActions: true,
-  },
   eslint: {
     ignoreDuringBuilds: true,
   },
