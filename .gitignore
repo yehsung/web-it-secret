@@ -28,6 +28,9 @@ firebase-debug.log*
 .env*.local
 .env
 
+# AI context
+PROJECT_CONTEXT.md
+
 # vercel
 .vercel
 

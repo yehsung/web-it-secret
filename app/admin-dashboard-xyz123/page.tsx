@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useRouter } from "next/navigation"
 import {
   AlertCircle,
   CheckCircle2,
   ChevronDown,
   ChevronUp,
   Lock,
+  LogOut,
   QrCode,
   Search,
   ShoppingBag,
@@ -88,6 +90,12 @@ export default function AdminDashboard() {
   const [selectedProduct, setSelectedProduct] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [isResetting, setIsResetting] = useState(false)
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    await fetch("/api/admin/auth", { method: "DELETE" })
+    router.push("/admin-dashboard-xyz123/login")
+  }
 
   useEffect(() => {
     // QR 코드 데이터 구독
@@ -188,9 +196,15 @@ export default function AdminDashboard() {
             <Lock className="h-6 w-6 text-purple-600 mr-2" />
             <h1 className="text-xl font-bold text-gray-900">관리자 대시보드</h1>
           </div>
-          <Button variant="outline" onClick={() => (window.location.href = "/")}>
-            메인 페이지로
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => (window.location.href = "/")}>
+              메인 페이지로
+            </Button>
+            <Button variant="outline" onClick={handleLogout} className="text-red-600 border-red-200 hover:bg-red-50">
+              <LogOut className="h-4 w-4 mr-1" />
+              로그아웃
+            </Button>
+          </div>
         </div>
       </header>
 
